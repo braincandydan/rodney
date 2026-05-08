@@ -1,0 +1,16 @@
+{
+  "name": "rodney",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Rodney — local desktop companion for Claude Code with persistent memory",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm build:mcp && pnpm --filter rodney-desktop tauri dev",
+    "build:mcp": "pnpm --filter @rodney/memory-mcp build",
+    "lint": "pnpm -r lint"
+  },
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "rodney-memory": {
+      "command": "node",
+      "args": [
+        "/ABSOLUTE/PATH/TO/Rodney/packages/memory-mcp/dist/server.js"
+      ],
+      "env": {
+        "RODNEY_DB_PATH": "/ABSOLUTE/PATH/TO/YOUR/VAULT/.rodney/rodney.db",
+        "RODNEY_VAULT_PATH": "/ABSOLUTE/PATH/TO/YOUR/VAULT"
+      }
+    }
+  }
+}
