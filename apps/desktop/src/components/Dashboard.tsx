@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { DashboardStats } from "../api";
 import { getDashboardStats } from "../api";
+import { NeuralMindMap } from "./NeuralMindMap";
 
 export function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -66,6 +67,7 @@ export function Dashboard() {
         <strong>Notes:</strong> {stats.agent.notes?.trim() ? stats.agent.notes : "—"}
       </p>
       <p className="muted tiny">Updated {stats.agent.updatedAt}</p>
+      <NeuralMindMap />
     </div>
   );
 }

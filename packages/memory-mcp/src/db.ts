@@ -89,4 +89,23 @@ export function migrate(db: Database.Database): void {
     INSERT OR IGNORE INTO agent_state (id, energy, clarity, confidence, notes, updated_at)
     VALUES (1, 'neutral', 'neutral', 'neutral', '', datetime('now'));
   `);
+  // memory_links: association graph between memories
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS memory_links (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      from_id    INTEGER NOT NULL REFERENCES memories(id),
+      to_id      INTEGER NOT NULL REFERENCES memories(id),
+      link_type  TEXT    NOT NULL,
+      strength   REAL    NOT NULL DEFAULT 0.5,
+      created_at TEXT    NOT NULL,
+      UNIQUE(from_id, to_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_mlinks_from ON memory_links(from_id);
+    CREATE INDEX IF NOT EXISTS idx_mlinks_to   ON memory_links(to_id);
+  `);
+
+  // Idempotent column migrations — ignored if already exist
+  try { db.exec(`ALTER TABLE memories ADD COLUMN status    TEXT NOT NULL DEFAULT 'confirmed'`); } catch (_) {}
+  try { db.exec(`ALTER TABLE memories ADD COLUMN skill_path TEXT`); } catch (_) {}
+  try { db.exec(`ALTER TABLE memories ADD COLUMN embedding  BLOB`); } catch (_) {}
 }

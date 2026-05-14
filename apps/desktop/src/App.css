@@ -309,20 +309,83 @@ code {
 }
 
 .project-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 0.65rem;
 }
 
 .project-card {
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 0.65rem;
   background: #0e141f;
 }
 
-.project-slug {
+.project-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem;
+}
+
+.project-slug-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
   font-weight: 700;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.project-slug-btn:hover {
+  color: var(--accent);
+}
+
+.project-badges {
+  display: flex;
+  gap: 0.35rem;
+  flex: 1;
+}
+
+.project-open-btn {
+  padding: 0.2rem 0.5rem;
+  font-size: 0.78rem;
+  margin-left: auto;
+}
+
+.badge-warn {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(210, 130, 30, 0.15);
+  color: #e3a74a;
+  border: 1px solid rgba(210, 130, 30, 0.3);
+}
+
+.badge-review {
+  display: inline-block;
+  font-size: 0.72rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(88, 166, 255, 0.12);
+  color: var(--accent);
+  border: 1px solid rgba(88, 166, 255, 0.25);
+}
+
+.project-overview {
+  padding: 0.65rem;
+  border-top: 1px solid var(--border);
+}
+
+.overview-content {
+  white-space: pre-wrap;
+  font-size: 0.82rem;
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0;
+  color: var(--text);
+  font-family: inherit;
 }
 
 .trait-list {
@@ -341,11 +404,262 @@ code {
   background: #0e141f;
 }
 
+.terminal-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.term-hint {
+  margin: 0 0 0 auto;
+}
+
+.term-tab {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.term-tab.active {
+  border-color: var(--accent);
+}
+
+.term-tab-label {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0.3rem 0.65rem;
+  font-size: 0.82rem;
+}
+
+.term-tab.active .term-tab-label {
+  color: var(--accent);
+}
+
+.term-tab-close {
+  border: none;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  padding: 0.3rem 0.5rem;
+  font-size: 1rem;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.term-tab-close:hover {
+  color: var(--danger);
+  background: rgba(248, 81, 73, 0.08);
+}
+
+.term-tab-add {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+  padding: 0.25rem 0.6rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.term-tab-add:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.new-session-modal {
+  width: min(480px, 92vw);
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.new-session-skill-group {
+  margin-bottom: 0.65rem;
+}
+
+.new-session-cat {
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.new-session-skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.new-session-skill-btn {
+  text-align: left;
+  background: #0e141f;
+  border-color: var(--border);
+  padding: 0.4rem 0.65rem;
+  font-size: 0.88rem;
+}
+
+.new-session-skill-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .terminal-wrap .terminal-host {
-  margin-top: 0.75rem;
-  height: 420px;
+  height: 460px;
   border: 1px solid var(--border);
   border-radius: 10px;
   overflow: hidden;
   background: #0b0f14;
+}
+
+/* Skill form modal */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 10;
+}
+
+.modal-dialog {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  width: min(500px, 92vw);
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.skill-form-dialog .modal-title {
+  margin: 0 0 0.2rem;
+  font-size: 1.1rem;
+}
+
+.skill-form-dialog .modal-subtitle {
+  margin: 0 0 1rem;
+  font-size: 0.82rem;
+}
+
+.skill-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.skill-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.skill-form-label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.required-mark {
+  color: var(--danger);
+}
+
+.skill-form-input {
+  font: inherit;
+  font-size: 0.9rem;
+  background: #0e141f;
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.65rem;
+  width: 100%;
+  outline: none;
+}
+
+.skill-form-input:focus {
+  border-color: var(--accent);
+}
+
+.skill-form-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.skill-form-badge {
+  display: inline-block;
+  margin-top: 0.35rem;
+  font-size: 0.68rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: rgba(88, 166, 255, 0.12);
+  color: var(--accent);
+  border: 1px solid rgba(88, 166, 255, 0.25);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  align-self: flex-start;
+}
+
+.pending-review {
+  margin-bottom: 1.25rem;
+  border: 1px solid #52381f;
+  border-radius: 10px;
+  padding: 0.75rem 1rem;
+  background: #1a1208;
+}
+
+.pending-review h3 {
+  margin: 0 0 0.2rem;
+  color: #e3a74a;
+  font-size: 0.95rem;
+}
+
+.pending-review .hint {
+  margin: 0 0 0.65rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.data-table tr.pending-row td {
+  background: rgba(227, 167, 74, 0.04);
+}
+
+.tab-badge {
+  display: inline-block;
+  font-size: 0.62rem;
+  line-height: 1;
+  background: #e05050;
+  color: #fff;
+  border-radius: 10px;
+  padding: 2px 5px;
+  margin-left: 4px;
+  vertical-align: middle;
+  font-weight: 600;
+}
+
+/* Neural mind map */
+.rn .pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rn-active .pulse {
+  animation: neural-pulse 1.6s ease-out infinite;
+}
+
+@keyframes neural-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+  }
 }

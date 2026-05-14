@@ -5,8 +5,10 @@
   "description": "Rodney — local desktop companion for Claude Code with persistent memory",
   "scripts": {
     "build": "pnpm -r build",
-    "dev": "pnpm build:mcp && pnpm --filter rodney-desktop tauri dev",
+    "dev": "pnpm build:mcp && node scripts/copy-resources.mjs && pnpm --filter rodney-desktop tauri dev",
     "build:mcp": "pnpm --filter @rodney/memory-mcp build",
+    "copy:resources": "node scripts/copy-resources.mjs",
+    "build:desktop": "pnpm --filter rodney-desktop exec tauri build",
     "lint": "pnpm -r lint"
   },
   "packageManager": "pnpm@9.15.4",

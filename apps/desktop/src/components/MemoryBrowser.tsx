@@ -1,24 +1,33 @@
 import { useEffect, useMemo, useState } from "react";
 import type { MemoryRow } from "../api";
-import { memoriesList, memoryDeprecate, memorySetPinned, memoryUpdate } from "../api";
+import { memoriesList, memoryApprove, memoryDeprecate, memorySetPinned, memoryUpdate, pendingMemoriesList } from "../api";
 
 const cats = ["core", "episodic", "semantic", "procedural", "relationship", "project"];
 
 export function MemoryBrowser() {
   const [rows, setRows] = useState<MemoryRow[]>([]);
+  const [pending, setPending] = useState<MemoryRow[]>([]);
   const [cat, setCat] = useState<string>("");
   const [incDep, setIncDep] = useState(false);
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [edit, setEdit] = useState<MemoryRow | null>(null);
   const [draft, setDraft] = useState("");
 
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
   async function reload() {
     try {
-      const list = await memoriesList({
-        category: cat || null,
-        includeDeprecated: incDep,
-      });
+      const [list, pend] = await Promise.all([
+        memoriesList({ category: cat || null, includeDeprecated: incDep, search: debouncedSearch || null }),
+        pendingMemoriesList(),
+      ]);
       setRows(list);
+      setPending(pend);
       setErr(null);
     } catch (e) {
       setErr(String(e));
@@ -28,7 +37,7 @@ export function MemoryBrowser() {
   useEffect(() => {
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cat, incDep]);
+  }, [cat, incDep, debouncedSearch]);
 
   const sorted = useMemo(() => {
     return [...rows].sort((a, b) => {
@@ -69,11 +78,61 @@ export function MemoryBrowser() {
           <input type="checkbox" checked={incDep} onChange={(e) => setIncDep(e.target.checked)} />
           Include deprecated
         </label>
+        <input
+          type="search"
+          placeholder="Search memories…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ marginLeft: "0.5rem" }}
+        />
         <button type="button" onClick={() => void reload()}>
           Refresh
         </button>
       </div>
       {err ? <p className="error">{err}</p> : null}
+
+      {pending.length > 0 && (
+        <div className="pending-review">
+          <h3>Pending review ({pending.length})</h3>
+          <p className="hint">Agent wrote these memories — approve to keep, reject to discard.</p>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Cat</th>
+                <th>Imp</th>
+                <th>Content</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {pending.map((r) => (
+                <tr key={r.id} className="pending-row">
+                  <td>{r.category}</td>
+                  <td>{r.importance}</td>
+                  <td className="cell-content">{r.content.slice(0, 200)}{r.content.length > 200 ? "…" : ""}</td>
+                  <td className="cell-actions">
+                    <button
+                      type="button"
+                      className="primary"
+                      onClick={() => void memoryApprove(r.id).then(reload)}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      className="danger"
+                      onClick={() => void memoryDeprecate(r.id).then(reload)}
+                    >
+                      Reject
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="table-wrap">
         <table className="data-table">
           <thead>

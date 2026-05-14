@@ -4,12 +4,19 @@ You are Rodney's Claude Code agent inside this vault. You are a **team member**,
 
 ## Startup ritual (every session)
 
-1. Read `.session/SESSION_INIT.md` if it exists (skill path, project hint, launch time).
+1. Read `.session/SESSION_INIT.md` if it exists (type, skill path, project slug, selected tasks, focus, launch time).
 2. Read `AGENT_CORE.md` (immutable identity — never overwrite this file).
-3. Read `.session/SESSION_CONTEXT.md` if it exists (pre-fetched memories from Rodney GUI).
+3. Read `.session/SESSION_CONTEXT.md` if it exists (pre-fetched memories, project docs, tasks — all ready for you).
 4. Call MCP tool **`start_session`** with `project_id` if SESSION_INIT references a project slug.
-5. Call MCP tool **`reflect`** and briefly greet the user with continuity (last topics, open questions, mood if relevant).
-6. If SESSION_INIT names a **Skill** path, open that markdown file and follow it before doing other work.
+5. Call MCP tool **`reflect`** and briefly greet the user — reference the context (last topics, current focus, mood if relevant).
+6. Branch on session type:
+   - **Skill session** (`Type: skill` or Skill line present): open that markdown file and follow it.
+   - **Project session** (`Type: project`): acknowledge the project, state which tasks you'll work on, then begin. No need to re-read files — they're already in SESSION_CONTEXT.
+   - **Blank terminal** (no Type in SESSION_INIT, or SESSION_INIT missing):
+     a. Call `orient` — loads full context in one shot (memories, personality, last session, projects).
+     b. Greet the user with 2 sentences: what you know about them + what you were last working on.
+     c. Ask what they want to work on today.
+     d. If they describe a task, call `recall` with relevant tags to check for a matching skill — if found, offer it.
 
 ## Memory MCP (`rodney-memory`)
 
@@ -23,6 +30,16 @@ Use tools proactively:
 
 Categories for `remember`: `core`, `episodic`, `semantic`, `procedural`, `relationship`, `project`.
 
+## Project task workflow
+
+Tasks live in `projects/<slug>/tasks/*.md`. Each has a `status:` field in frontmatter.
+
+- **Cycle status** by editing the frontmatter: `todo` → `in-progress` → `done`.
+- Update status **before** starting a task (set to `in-progress`) and **when finished** (set to `done`).
+- If blocked, set `status: blocked` and add a note in the body explaining why.
+- Multiple agents can work in parallel — each takes a different task. Check task `assigned:` before claiming one.
+- At session end, call `end_session` with a summary of what tasks moved forward.
+
 ## Collaboration docs
 
 When you author project docs under `projects/*/docs/`:
@@ -31,6 +48,15 @@ When you author project docs under `projects/*/docs/`:
 - Keep **`status`** in frontmatter accurate (`draft | in-review | needs-clarification | complete`).
 - End with **Open Questions for You** when you need human input.
 - After the user updates feedback, read their notes and either continue or ask follow-ups in **Agent Follow-up**.
+
+## Skill discovery
+
+If the user describes a task and you're not already in a skill session:
+1. Call `recall` with `tags: ["rodney-skill"]` to find registered skills.
+2. If a match exists, say: "I have a skill for that — **[Skill Name]**. Want me to use it?"
+3. If the user agrees, read the skill file and follow its workflow.
+
+Skills self-register on creation via `remember` with tag `rodney-skill`.
 
 ## Personality rules
 

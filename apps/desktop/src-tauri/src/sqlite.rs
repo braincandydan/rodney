@@ -18,6 +18,7 @@ pub struct MemoryRow {
     pub confidence: f64,
     pub session_id: Option<i64>,
     pub is_deprecated: bool,
+    pub status: String,
 }
 
 fn map_memory_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryRow> {
@@ -34,6 +35,7 @@ fn map_memory_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MemoryRow> {
         confidence: row.get(9)?,
         session_id: row.get(10)?,
         is_deprecated: row.get::<_, i64>(11)? != 0,
+        status: row.get::<_, Option<String>>(12)?.unwrap_or_else(|| "confirmed".to_string()),
     })
 }
 
@@ -105,9 +107,24 @@ pub fn open_ro_db(db_path: &Path) -> Result<Connection, String> {
         );
         INSERT OR IGNORE INTO agent_state (id, energy, clarity, confidence, notes, updated_at)
         VALUES (1, 'neutral', 'neutral', 'neutral', '', datetime('now'));
+        CREATE TABLE IF NOT EXISTS script_runs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          script_name TEXT NOT NULL,
+          started_at TEXT NOT NULL,
+          ended_at TEXT,
+          success INTEGER,
+          exit_code INTEGER,
+          output TEXT,
+          metadata TEXT,
+          created_at TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_script_runs_name ON script_runs(script_name);
+        CREATE INDEX IF NOT EXISTS idx_script_runs_started ON script_runs(started_at);
         ",
     )
     .map_err(|e| e.to_string())?;
+    // Idempotent column migration — error ignored if column already exists
+    let _ = conn.execute_batch("ALTER TABLE memories ADD COLUMN status TEXT NOT NULL DEFAULT 'confirmed'");
     Ok(conn)
 }
 
@@ -127,8 +144,8 @@ pub fn recall_memories(
         "project",
     ];
     let mut sql = String::from(
-        "SELECT id, content, category, importance, pinned, access_count, created_at, last_accessed, tags, confidence, session_id, is_deprecated
-         FROM memories WHERE is_deprecated = 0",
+        "SELECT id, content, category, importance, pinned, access_count, created_at, last_accessed, tags, confidence, session_id, is_deprecated, status
+         FROM memories WHERE is_deprecated = 0 AND (status = 'confirmed' OR status IS NULL)",
     );
     let mut vals: Vec<rusqlite::types::Value> = vec![];
     if let Some(c) = category {
@@ -145,7 +162,7 @@ pub fn recall_memories(
     }
     for t in tag_list {
         sql.push_str(" AND LOWER(COALESCE(tags,'')) LIKE ?");
-        vals.push(rusqlite::types::Value::Text(format!("%{}%", t.to_lowercase())));
+        vals.push(rusqlite::types::Value::Text(format!("%\"{}\"%" , t.to_lowercase())));
     }
     sql.push_str(
         " ORDER BY pinned DESC, importance DESC,
@@ -183,6 +200,7 @@ pub fn list_all_memories(
     conn: &Connection,
     category: Option<&str>,
     include_deprecated: bool,
+    search: Option<&str>,
 ) -> Result<Vec<MemoryRow>, String> {
     const ALLOW_CAT: &[&str] = &[
         "core",
@@ -193,15 +211,26 @@ pub fn list_all_memories(
         "project",
     ];
     let mut sql = String::from(
-        "SELECT id, content, category, importance, pinned, access_count, created_at, last_accessed, tags, confidence, session_id, is_deprecated FROM memories",
+        "SELECT id, content, category, importance, pinned, access_count, created_at, last_accessed, tags, confidence, session_id, is_deprecated, status FROM memories",
     );
-    let mut clauses = vec![];
+    let mut clauses = vec!["(status = 'confirmed' OR status IS NULL)".to_string()];
+    let mut vals: Vec<rusqlite::types::Value> = vec![];
     if !include_deprecated {
         clauses.push("is_deprecated = 0".to_string());
     }
     if let Some(c) = category {
         if ALLOW_CAT.contains(&c) {
-            clauses.push(format!("category = '{}'", c.replace('\'', "''")));
+            clauses.push("category = ?".to_string());
+            vals.push(rusqlite::types::Value::Text(c.to_string()));
+        }
+    }
+    if let Some(q) = search {
+        let trimmed = q.trim();
+        if !trimmed.is_empty() {
+            let pat = format!("%{}%", trimmed.to_lowercase());
+            clauses.push("(LOWER(content) LIKE ? OR LOWER(COALESCE(tags,'')) LIKE ?)".to_string());
+            vals.push(rusqlite::types::Value::Text(pat.clone()));
+            vals.push(rusqlite::types::Value::Text(pat));
         }
     }
     if !clauses.is_empty() {
@@ -211,7 +240,7 @@ pub fn list_all_memories(
     sql.push_str(" ORDER BY pinned DESC, importance DESC, datetime(created_at) DESC");
     let mut stmt = conn.prepare(&sql).map_err(|e| e.to_string())?;
     let rows = stmt
-        .query_map([], map_memory_row)
+        .query_map(rusqlite::params_from_iter(vals), map_memory_row)
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
@@ -243,6 +272,28 @@ pub fn set_memory_pinned(conn: &Connection, id: i64, pinned: bool) -> Result<boo
         )
         .map_err(|e| e.to_string())?;
     Ok(n > 0)
+}
+
+pub fn approve_memory(conn: &Connection, id: i64) -> Result<bool, String> {
+    let n = conn
+        .execute(
+            "UPDATE memories SET status = 'confirmed' WHERE id = ?1 AND status = 'pending'",
+            params![id],
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(n > 0)
+}
+
+pub fn list_pending_memories(conn: &Connection) -> Result<Vec<MemoryRow>, String> {
+    let sql = "SELECT id, content, category, importance, pinned, access_count, created_at, last_accessed, tags, confidence, session_id, is_deprecated, status \
+               FROM memories WHERE status = 'pending' AND is_deprecated = 0 ORDER BY datetime(created_at) DESC";
+    let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], map_memory_row)
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
 }
 
 #[derive(Debug, Serialize)]
@@ -373,4 +424,165 @@ pub fn delete_personality(conn: &Connection, trait_name: &str) -> Result<bool, S
         .execute("DELETE FROM personality WHERE trait = ?1", params![trait_name])
         .map_err(|e| e.to_string())?;
     Ok(n > 0)
+}
+
+pub fn list_user_profile_brief(conn: &Connection) -> Result<Vec<(String, Option<String>)>, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT observation, context FROM user_profile \
+             ORDER BY datetime(last_updated) DESC LIMIT 12",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScriptRunRow {
+    pub id: i64,
+    pub script_name: String,
+    pub started_at: String,
+    pub ended_at: Option<String>,
+    pub success: Option<bool>,
+    pub exit_code: Option<i64>,
+    pub output: Option<String>,
+    pub metadata: Option<String>,
+    pub created_at: String,
+}
+
+pub fn log_script_run(
+    conn: &Connection,
+    script_name: &str,
+    started_at: &str,
+    ended_at: Option<&str>,
+    success: Option<bool>,
+    exit_code: Option<i64>,
+    output: Option<&str>,
+    metadata: Option<&str>,
+) -> Result<i64, String> {
+    conn.execute(
+        "INSERT INTO script_runs (script_name, started_at, ended_at, success, exit_code, output, metadata)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            script_name,
+            started_at,
+            ended_at,
+            success.map(|b| if b { 1i64 } else { 0i64 }),
+            exit_code,
+            output,
+            metadata,
+        ],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(conn.last_insert_rowid())
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryNode {
+    pub id: i64,
+    pub category: String,
+    pub importance: i64,
+    pub access_count: i64,
+    pub tags: Option<String>,
+    pub pinned: bool,
+    pub confidence: f64,
+    pub snippet: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryGraphData {
+    pub nodes: Vec<MemoryNode>,
+    pub recent_ids: Vec<i64>,
+}
+
+pub fn get_memory_graph_data(conn: &Connection) -> Result<MemoryGraphData, String> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, category, importance, access_count, tags, pinned, confidence,
+                    SUBSTR(content, 1, 50) as snippet
+             FROM memories
+             WHERE is_deprecated = 0 AND (status = 'confirmed' OR status IS NULL)
+             ORDER BY pinned DESC, importance DESC, access_count DESC
+             LIMIT 150",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let nodes = stmt
+        .query_map([], |row| {
+            Ok(MemoryNode {
+                id: row.get(0)?,
+                category: row.get(1)?,
+                importance: row.get(2)?,
+                access_count: row.get(3)?,
+                tags: row.get(4)?,
+                pinned: row.get::<_, i64>(5)? != 0,
+                confidence: row.get(6)?,
+                snippet: row.get(7)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    let mut recent_stmt = conn
+        .prepare(
+            "SELECT DISTINCT memory_id FROM memory_access_log
+             WHERE accessed_at > datetime('now', '-30 seconds')",
+        )
+        .map_err(|e| e.to_string())?;
+
+    let recent_ids = recent_stmt
+        .query_map([], |row| row.get::<_, i64>(0))
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+
+    Ok(MemoryGraphData { nodes, recent_ids })
+}
+
+pub fn list_script_runs(
+    conn: &Connection,
+    script_name: Option<&str>,
+    limit: i64,
+) -> Result<Vec<ScriptRunRow>, String> {
+    let sql;
+    let vals: Vec<rusqlite::types::Value>;
+    if let Some(name) = script_name {
+        sql = "SELECT id, script_name, started_at, ended_at, success, exit_code, output, metadata, created_at \
+               FROM script_runs WHERE script_name = ?1 ORDER BY datetime(started_at) DESC LIMIT ?2";
+        vals = vec![
+            rusqlite::types::Value::Text(name.to_string()),
+            rusqlite::types::Value::Integer(limit),
+        ];
+    } else {
+        sql = "SELECT id, script_name, started_at, ended_at, success, exit_code, output, metadata, created_at \
+               FROM script_runs ORDER BY datetime(started_at) DESC LIMIT ?1";
+        vals = vec![rusqlite::types::Value::Integer(limit)];
+    }
+    let mut stmt = conn.prepare(sql).map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map(rusqlite::params_from_iter(vals), |row| {
+            Ok(ScriptRunRow {
+                id: row.get(0)?,
+                script_name: row.get(1)?,
+                started_at: row.get(2)?,
+                ended_at: row.get(3)?,
+                success: row.get::<_, Option<i64>>(4)?.map(|v| v != 0),
+                exit_code: row.get(5)?,
+                output: row.get(6)?,
+                metadata: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| e.to_string())?;
+    Ok(rows)
 }
